@@ -1,0 +1,665 @@
+// HAPLOTYPES
+// Copyright 2009-2103 Trevor Bedford
+
+/*	This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.*/
+
+float CHARGE;
+float MAXVEL;
+float WALLMULTIPLIER;
+float SPRINGFORCE;
+float LINKDIST;
+int POPSIZE;
+float MU;
+float GEN;
+float SIZING;
+boolean LOOPING;
+boolean DYNAMICS;
+boolean STATISTICS;
+boolean HELP;
+boolean FRATE;
+boolean GRAYBG;
+float BG;
+float OUTLINE;
+
+Population population;
+Haplotype selection;
+Series hSeries;
+Series kSeries;
+PFont fontN;
+PFont fontI;
+
+void setup() {
+
+	DYNAMICS = true;
+	STATISTICS = true;
+	HELP = false;
+	FRATE = false;
+	GRAYBG = true;
+	LOOPING = true;	
+
+	CHARGE = 25; 
+	MAXVEL = 1.2;
+	WALLMULTIPLIER = 20;
+	SIZING = 3;
+	SPRINGFORCE = 0.1;
+	LINKDIST = 40;
+	
+	if (GRAYBG) {
+		BG = 20;
+		OUTLINE = 100;
+	}
+	else {
+		BG = 100;
+		OUTLINE = 20;
+	}
+	
+	POPSIZE = 100;
+	MU = 0.05;
+	GEN = 60.0;	// frame per generation // 60
+	
+	size(600,450);
+	frameRate(60);	
+	colorMode(HSB,100);
+	smooth();
+	noStroke();
+	population = new Population();	
+	selection = null;	
+	hSeries = new Series();
+	kSeries = new Series();	
+	fontN = loadFont("GillSans-48.vlw");
+	
+}
+
+void draw() {
+	background(0,0,BG);
+	population.run();
+	if (STATISTICS) { stats(); }
+	if (HELP) { help(); }
+	if (FRATE) { showFrameRate(); }
+}
+
+void showFrameRate() {
+	fill(0,0,OUTLINE);
+	stroke(0,0,OUTLINE);
+	textFont(fontN, 14);
+	int fps = int(frameRate);
+	text(fps + " frames / sec", 10, 85);
+}
+
+void help() {
+	
+	fill(0,0,OUTLINE);
+	stroke(0,0,OUTLINE);
+	smooth();
+	textFont(fontN, 14);
+
+	float h = 170;
+	float mod = 20;
+	float fromleft = 100;
+	text("H",10,h); text("-  show/hide keyboard commands",fromleft,h); h += mod;
+	text("F",10,h); text("-  show/hide frame rate",fromleft,h); h += mod;
+	text("S",10,h); text("-  show/hide statistics",fromleft,h); h += mod;
+	text("C",10,h); text("-  switch between background colors",fromleft,h); h += mod;
+	text("SPACE",10,h); text("-  start/stop animation",fromleft,h); h += mod;
+	text("D",10,h); text("-  start/stop population dynamics",fromleft,h); h += mod;
+	text("DOWN / UP",10,h); text("-  decrease / increase population size",fromleft,h); h += mod;
+	text("LEFT / RIGHT",10,h); text("-  decrease / increase mutation rate",fromleft,h); h += mod;
+		
+	textFont(fontN, 12);
+	text("Copyright 2009-2013 Trevor Bedford",width-205,20);
+	
+}
+
+void stats() {
+
+	fill(0,0,OUTLINE);
+	stroke(0,0,OUTLINE);
+	textFont(fontN, 14);
+
+	// population size
+	text(POPSIZE + " individuals",10,25);
+	
+	// mutation rate
+	if (DYNAMICS) {
+		float mrate = round( (float) MU * 100.0)/100.0;
+		text(mrate + " mut / gen", 10, 45);
+	}	
+	
+	// theta
+	if (DYNAMICS) {
+		float theta = round( (float) POPSIZE * (float) MU * 100.0)/100.0;
+		text("Theta = " + theta, 10, 65);
+	}	
+	
+	// exp H
+	if (DYNAMICS) {
+		float theta = (float) POPSIZE * (float) MU;
+		float exph = round( ( theta / (theta + 1) ) * 100.0)/100.0;
+		text("Exp H = " + exph, 10, 85);
+	}	
+	
+	// obs H
+	if (DYNAMICS) {
+		hSeries.add(population.heterozygosity());
+		float obsh = round( hSeries.mean() * 100.0)/100.0;
+		text("Obs H = " + obsh, 10, 105);
+	}	
+	
+	// exp H
+	if (DYNAMICS) {
+		float theta = (float) POPSIZE * (float) MU;
+		float expk = 0;
+		for (int i = 1; i <= POPSIZE; i++) {
+			expk += theta / (theta + i - 1);
+		}
+		expk = round(expk * 10.0)/10.0;
+		text("Exp k = " + expk, 10, 125);
+	}		
+	
+	// obs k
+	if (DYNAMICS) {
+		kSeries.add(population.variantCount());
+		float obsk = round( kSeries.mean() * 10.0)/10.0;
+		text("Obs k = " + obsk, 10, 145);
+	}		
+		
+}
+
+void mousePressed() {
+	float closest = 20;
+	for (int i=0; i<population.size(); i++) {
+		Haplotype hp = population.get(i);
+		float d = dist(mouseX, mouseY, hp.loc.x, hp.loc.y);
+		if (d < closest) {
+			selection = hp;
+			closest = d;
+		}
+	}
+	if (selection != null) {
+		selection.free = false;
+	}	
+}
+
+void mouseDragged() {
+	if (selection != null) {
+		selection.loc.x = mouseX;
+		selection.loc.y = mouseY;
+	}
+}
+
+void mouseReleased() {
+	if (selection != null) {
+		selection.free = true;
+	}
+	selection = null;
+}
+
+void keyPressed() {
+	if (key == ' ') {
+		if (LOOPING) {
+			LOOPING = false;
+			noLoop();
+		}
+		else if (!LOOPING) {
+			LOOPING = true;
+			loop();
+		}
+  	}  
+  	if (key == 'd') {
+		if (DYNAMICS) { DYNAMICS = false; }
+		else if (!DYNAMICS) { DYNAMICS = true; }
+  	}  
+  	if (key == 's') {
+		if (STATISTICS) { STATISTICS = false; }
+		else if (!STATISTICS) { STATISTICS = true; }
+  	}       	
+  	if (key == 'h') {
+		if (HELP) { HELP = false; }
+		else if (!HELP) { HELP = true; }
+  	}      	
+  	if (key == 'f') {
+		if (FRATE) { FRATE = false; }
+		else if (!FRATE) { FRATE = true; }
+  	}      	  	
+	if (keyCode == UP) { 
+		population.increment();
+		POPSIZE += 1;
+  	} 
+	if (keyCode == DOWN) {
+		if (POPSIZE > 1) {
+			population.decrement();
+			POPSIZE -= 1;		
+		}
+  	}   
+	if (keyCode == RIGHT) { 
+		MU += 0.01;
+  	} 
+	if (keyCode == LEFT) { 
+		if (MU > 0.01) {
+			MU -= 0.01;
+		}
+  	}    
+	if (key == 'c') {
+		if (GRAYBG) {
+			GRAYBG = false;
+			BG = 100;
+			OUTLINE = 20;
+		}
+		else if (!GRAYBG) {
+			GRAYBG = true;
+			BG = 20;
+			OUTLINE = 100;
+		}
+  	}   	
+}
+
+class Haplotype {
+
+	PVector loc;
+	PVector vel;
+	int count;  
+	float rad;
+	float hue;
+	Haplotype parent;
+	boolean flagged;
+	boolean free;
+
+	Haplotype() {
+		loc = new PVector(width/2,height/2);
+    	vel = new PVector(0,0);
+    	count = POPSIZE;
+    	hue = 90;
+		parent = null;
+		flagged = false;
+		free = true;
+	}
+	
+	Haplotype(Haplotype p) {
+		float x = p.loc.x + random(-1,1);
+		float y = p.loc.y + random(-1,1);	
+		loc = new PVector(x,y);
+    	vel = new PVector(0,0);
+    	count = 1;
+    	hue = p.hue + 4;
+    	if (hue > 100) {
+    		hue -= 100;
+    	}
+    	if (hue < 0) {
+    		hue += 100;
+    	}
+		parent = p;
+		flagged = false;
+		free = true;
+	}	
+	
+	void increment() {
+		count += 1;
+	}
+	
+	void decrement() {
+		count -= 1;
+	}
+    
+	void update() {
+	
+		if (free) {
+			vel.x = constrain(vel.x,-MAXVEL,MAXVEL);	// contrains speed
+			vel.y = constrain(vel.y,-MAXVEL,MAXVEL);
+			loc.add(vel);          						// update location	
+		}
+		
+		float target = sqrt( (float) count ) * SIZING + 1.0;
+		if (rad < target - 0.25) {
+			rad += 0.2;
+		}
+		if (rad > target + 0.25) {
+			rad -= 0.2;
+		}
+		
+		reset();
+			
+	}
+	
+	void reset() {
+		vel = new PVector(0,0);
+		flagged = false;
+	}
+	    	
+  	void displayAnc() {    	 	
+		stroke(0,0,OUTLINE);
+		if (parent != null) {
+			line(loc.x, loc.y, parent.loc.x, parent.loc.y);
+		}
+  	}
+  	
+  	void displayInd() {
+  		stroke(0,0,OUTLINE); 
+  	    if (rad > 2) { 
+  	    	if (free) {
+  	    		fill(hue, 90, 100);
+  	    	}
+  	    	else {
+  	    		fill(hue, 80, 100);
+  	    	}
+  	    }
+  	    else { 
+  	    	fill(0,0,50);   	    	
+  	    }
+		ellipse(loc.x, loc.y, rad*2, rad*2);
+  	}
+  	
+}
+
+// The Population (a list of Haplotype objects)
+class Population {
+  
+  	ArrayList pop; // An arraylist for all the individuals
+
+  	Population() {
+    	pop = new ArrayList(); 
+    	Haplotype h = new Haplotype();
+    	pop.add(h);
+  	}
+
+	void run() {
+		if (DYNAMICS) { sample(); }
+		if (DYNAMICS) { mutate(); }
+		connect();
+		repel();
+		update();
+		cleanup();
+		display();
+	}
+	
+	int size() {
+		return pop.size();
+	}
+		
+	Haplotype get(int i) {
+		return (Haplotype) pop.get(i);
+	}
+	
+	Haplotype sampleByFreq() {
+		double total = 0;
+		double target = random(0,POPSIZE);
+		for (int i = 0; i < size(); i++) {
+			total += get(i).count;
+			if (target < total) {
+				return get(i);
+			}
+		}
+		return null;
+	}
+	
+	// choose random haplotype to increase by 1
+	void increment() {
+		Haplotype hp = sampleByFreq(); 
+		hp.increment();
+	}
+	
+	// choose random haplotype to decrease by 1
+	void decrement() {
+		Haplotype hp = sampleByFreq(); 
+		hp.decrement();
+	}	
+	
+	// choose random haplotype to increase by 1 and another haplotype to decrease by 1
+	// sample according to frequency
+	void sample() {
+		float popRate = (1 / (float)GEN) * (float) POPSIZE;		// population birth-death rate
+		int events = poissonSample(popRate);
+		for (int i = 0; i < events; i++) {
+			increment(); 				
+			decrement();
+		}
+	}
+	
+	void mutate() {
+		float popRate = (1/(float)GEN) * (float) POPSIZE * MU;		// population mutation rate
+		int events = poissonSample(popRate);
+		for (int i = 0; i < events; i++) {
+			Haplotype h = sampleByFreq(); 					// draw random haplotype to mutate
+			Haplotype mut = new Haplotype(h);
+			pop.add(mut);
+			h.decrement();
+		}		
+	}
+		
+	// remove dead haplotypes that are not parent to any live haplotypes
+	void cleanup() {
+		for (int i = 0; i < size(); i++) {
+			Haplotype hp = get(i);  
+			if (hp.count > 0 || !hp.free) { 
+				hp.flagged = true; 
+				Haplotype jhp = hp.parent;
+				while (jhp != null) {
+					jhp.flagged = true;
+					jhp = jhp.parent;
+				}
+			}
+		}
+		for (int i = 0; i < size(); i++) {		
+			Haplotype hp = get(i);  
+			if (!hp.flagged) {
+				pop.remove(i);
+				i = 0;
+			}
+		}
+	}
+
+	void update() {
+		for (int i = 0; i < pop.size(); i++) {
+			Haplotype ind = (Haplotype) pop.get(i);  
+			ind.update(); 
+		}
+	}
+		
+	void display() {
+		for (int i = 0; i < size(); i++) {
+			Haplotype hp = get(i);  
+			hp.displayAnc(); 
+		}
+		for (int i = 0; i < size(); i++) {
+			Haplotype hp = get(i);  
+			hp.displayInd(); 
+		}
+	}
+	
+	// connection between linked haplotypes
+	void connect() {
+	
+		for (int i = 0 ; i < size(); i++) {
+		
+			Haplotype hp = get(i);
+			Haplotype jhp = hp.parent;
+			
+			if (jhp != null) {
+							
+				PVector diff = PVector.sub(hp.loc,jhp.loc);			// Calculate vector pointing away from neighbor
+				diff.normalize();
+				float distance = PVector.dist(hp.loc,jhp.loc);		// weight by Hooke's law
+				diff.mult( hook(distance) );
+				hp.vel.add(diff);									// forces accelerate the individual		
+								
+				diff = PVector.sub(jhp.loc,hp.loc);					// Calculate vector pointing away from neighbor
+				diff.normalize();				
+				distance = PVector.dist(jhp.loc,hp.loc);			// weight by Hooke's law
+				diff.mult( hook(distance) );						
+				jhp.vel.add(diff);									// forces accelerate the individual							
+			
+			}
+			
+		}
+		
+	}
+	
+	// pairwise repulsion between haplotypes
+	void repel() {
+		
+		for (int i = 0 ; i < size(); i++) {
+		
+			Haplotype hp = get(i);
+			PVector push = new PVector(0,0);
+			float distance;
+			PVector diff;
+			
+			// repel from other Haplotypes
+			for (int j = 0 ; j < size(); j++) {
+				if (i != j) {
+			
+					Haplotype jhp = get(j);
+					// Calculate vector pointing away from neighbor
+					diff = PVector.sub(hp.loc,jhp.loc);
+					diff.normalize();
+					// weight by Coulomb's law
+					distance = PVector.dist(hp.loc,jhp.loc);
+					diff.mult( coulomb(distance) );
+					push.add(diff);
+				
+				}
+			}
+			
+			// repel from left wall
+			diff = new PVector(1,0);
+			distance = hp.loc.x-0;
+			diff.mult( WALLMULTIPLIER*coulomb(distance) );
+			push.add(diff);
+
+			// repel from right wall
+			diff = new PVector(-1,0);
+			distance = width-hp.loc.x;
+			diff.mult( WALLMULTIPLIER*coulomb(distance) );
+			push.add(diff);		
+			
+			// repel from top wall
+			diff = new PVector(0,1);
+			distance = hp.loc.y-0;
+			diff.mult( WALLMULTIPLIER*coulomb(distance) );
+			push.add(diff);
+
+			// repel from bottom wall
+			diff = new PVector(0,-1);
+			distance = height-hp.loc.y;
+			diff.mult( WALLMULTIPLIER*coulomb(distance) );
+			push.add(diff);			
+							
+			// forces accelerate the individual			
+			hp.vel.add(push);
+			
+		}
+		
+  	}
+  	
+  	// return average heterozygosity in the population
+  	float heterozygosity() {
+  		float het = 0;
+		for (int i = 0; i < 100; i++) {
+			Haplotype hp = sampleByFreq();
+			Haplotype jhp = sampleByFreq();
+			if (hp != jhp) {
+				het += 1;
+			}
+		}
+		return het / 100.0;
+  	}
+  	
+	float variantCount() {
+		float total = 0;
+		for (int i = 0; i < size(); i++) {
+			Haplotype hp = get(i);
+			if (hp.count > 0) {
+				total += 1;
+			}
+		}
+		return total;
+	}  	
+  	
+}
+
+// A series of statistics 
+class Series {
+
+  	ArrayList list; 
+  	
+  	Series() {
+  		list = new ArrayList();
+  	}
+  	
+  	int size() {
+  		return list.size();
+  	}
+  	
+  	void add(float value) {
+  		Statistic x = new Statistic(value);
+  		list.add(x);
+  		if (size() > 100) {
+  			list.remove(0);
+  		}
+  	}
+  	
+  	float mean() {
+  		float mean = 0;
+		for (int i = 0; i < size(); i++) {
+			Statistic x = (Statistic) list.get(i);
+			mean += x.getValue();
+		}
+		return mean / (float) size();
+  	}
+
+}
+
+class Statistic {
+
+	float value;
+	
+	Statistic(float x) {
+		value = x;
+	}
+	
+	float getValue() {
+		return value;
+	}
+
+}
+
+// Coulomb's law
+float coulomb(float d) {
+	float force;
+	if (d > 0) {
+		force = sq(CHARGE) / sq(d);
+	}
+	else {
+		force = 10000;
+	}
+	return force;
+}
+
+// Hooke's law, force of spring is linear with distance
+float hook(float d) {
+	float force;
+	force = SPRINGFORCE * (LINKDIST - d);
+	return force;
+}
+
+int poissonSample(float lambda) {
+	float t = exp(-1*lambda);
+	int k = 0;
+	float p = 1;
+	while (p > t) {
+		k++;
+		p *= random(0,1);
+	}
+	return k - 1;
+}
+
