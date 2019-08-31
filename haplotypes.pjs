@@ -113,6 +113,7 @@ void help() {
 	text("C",10,h); text("-  switch between background colors",fromleft,h); h += mod;
 	text("SPACE",10,h); text("-  start/stop animation",fromleft,h); h += mod;
 	text("D",10,h); text("-  start/stop population dynamics",fromleft,h); h += mod;
+	text("Z / X",10,h); text("-  slower / faster simulation",fromleft,h); h += mod;
 	text("DOWN / UP",10,h); text("-  decrease / increase population size",fromleft,h); h += mod;
 	text("LEFT / RIGHT",10,h); text("-  decrease / increase mutation rate",fromleft,h); h += mod;
 		
@@ -133,7 +134,8 @@ void stats() {
 	// mutation rate
 	if (DYNAMICS) {
 		float mrate = round( (float) MU * 100.0)/100.0;
-		text(mrate + " mut / gen", 10, 45);
+	        float gensPerSec = frameRate / GEN;
+          text(mrate + " mut / gen, " + (gensPerSec < .01 || gensPerSec > 10000 ? gensPerSec.toExponential(2) : (gensPerSec >= 1 ? int(gensPerSec) : gensPerSec.toFixed(2))) + " gen / s", 10, 45);
 	}	
 	
 	// theta
@@ -231,6 +233,12 @@ void keyPressed() {
   	if (key == 'f') {
 		if (FRATE) { FRATE = false; }
 		else if (!FRATE) { FRATE = true; }
+  	}      	  	
+  	if (key == 'z') {
+          GEN *= 2;
+  	}      	  	
+  	if (key == 'x') {
+          GEN /= 2;
   	}      	  	
 	if (keyCode == UP) { 
 		population.increment();
@@ -373,7 +381,7 @@ class Population {
   	}
 
 	void run() {
-		if (DYNAMICS) { sample(); }
+	        if (DYNAMICS) { sample(); }
 		if (DYNAMICS) { mutate(); }
 		connect();
 		repel();
